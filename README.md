@@ -1,2 +1,2 @@
-# SO
+# Projeto SO
 Cooking...
