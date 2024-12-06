@@ -1,25 +1,13 @@
-#include <dirent.h> //ADDED
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
 
-
-int main(int argc, char* argv[]) {
-
-  /*if (argc < 3) {
-    fprintf(stderr, "Invalid Number of Arguments");
-  }
-
-  char* dir = argv[0];
-  int max_backups = atoi(argv[2]); // Number of backups converted to Int
-  */
-
+int main() {
 
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
@@ -106,7 +94,7 @@ int main(int argc, char* argv[]) {
       case CMD_HELP:
         printf( 
             "Available commands:\n"
-            "  WRITE [(key,value),(key2,value2),...]\n"
+            "  WRITE [(key,value)(key2,value2),...]\n"
             "  READ [key,key2,...]\n"
             "  DELETE [key,key2,...]\n"
             "  SHOW\n"
