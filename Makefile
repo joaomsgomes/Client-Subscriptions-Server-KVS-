@@ -23,6 +23,7 @@ run: kvs
 
 clean:
 	rm -f *.o kvs
+	rm -f *:Zone.Identifier kvs
 
 format:
 	@which clang-format >/dev/null 2>&1 || echo "Please install clang-format to run this command"
