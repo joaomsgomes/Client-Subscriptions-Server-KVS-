@@ -24,15 +24,26 @@ int is_job_file(const char *filename) {
     return 1;
 }
 
-int process_file(const char* filename) {
+int process_file(const char* file_path) {
 
-    int fd = open(filename,O_RDONLY); 
-    printf("Opening file: %s\n", filename);
+    int fd = open(file_path,O_RDONLY); 
+    printf("Opening file: %s\n", file_path);
 
     if (fd < 0) {
         printf("Error number: %d\n", errno);
         perror("Error opening file\n");
     }
+
+    char* out_file_path = get_output_filename(file_path);
+
+    int fd_out = open(out_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    printf("Opening output file: %s\n", out_file_path);
+
+    if (fd_out < 0) {
+        printf("Error number: %d\n", errno);
+        perror("Error opening file\n");
+    }
+
 
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -40,24 +51,29 @@ int process_file(const char* filename) {
     size_t num_pairs;
     char output[MAX_WRITE_SIZE];
 
-    while (1) {
+    // int com_counter = 0;
 
+    while (1) {
+        
         switch (get_next(fd)) {
 
             case CMD_WRITE:
-            num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+
+                num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+
                 if (num_pairs == 0) {
-                fprintf(stderr, "Invalid command. See HELP for usage\n");
+                    fprintf(stderr, "Invalid command. See HELP for usage\n");
                 
                 }
 
                 if (kvs_write(num_pairs, keys, values)) {
-                fprintf(stderr, "Failed to write pair\n");
+                    fprintf(stderr, "Failed to write pair\n");
                 }
 
                 break;
 
             case CMD_READ:
+
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_pairs == 0) {
@@ -68,10 +84,12 @@ int process_file(const char* filename) {
                 if (kvs_read(num_pairs, keys, output)) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
-                writeInFile(output, get_output_filename(filename));
+                writeInFile(output, fd_out);
+
                 break;
 
             case CMD_DELETE:
+
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_pairs == 0) {
@@ -79,14 +97,16 @@ int process_file(const char* filename) {
                 
                 }
 
-                if (kvs_delete(num_pairs, keys)) {
+                if (kvs_delete(num_pairs, keys, output)) {
                     fprintf(stderr, "Failed to delete pair\n");
                 }
+                writeInFile(output, fd_out);
                 break;
 
             case CMD_SHOW:
 
-                kvs_show();
+                kvs_show(output);
+                writeInFile(output, fd_out);
                 break;
 
             case CMD_WAIT:
@@ -130,7 +150,8 @@ int process_file(const char* filename) {
                 break;
 
             case EOC:
-                kvs_terminate();
+                // kvs_terminate();
+                close(fd);
                 return 0;
         }
     }
@@ -143,7 +164,7 @@ char* get_output_filename(const char *input_filename) {
     
     if (ext != NULL && strcmp(ext, ".job") == 0) {
         // Cria um buffer para armazenar o novo nome do arquivo
-        static char output_filename[256];
+        static char output_filename[MAX_WRITE_SIZE];
         
         // Copia o nome do arquivo sem a extensão ".job"
         size_t length = (size_t)(ext - input_filename);
@@ -159,16 +180,10 @@ char* get_output_filename(const char *input_filename) {
     }
 }
 
-int writeInFile(char output[MAX_WRITE_SIZE], const char *filename) {
-    
+int writeInFile(char output[MAX_WRITE_SIZE], int fd) {
 
-    int fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644);
 
-    if (fd < 0) {
-        perror("Error Opening file\n");
-        return 0;
-    }
-
+    printf("outputToWrite: %s\n", output);
     
     ssize_t bytes_written = 0;
     ssize_t total_written = 0;
@@ -178,23 +193,21 @@ int writeInFile(char output[MAX_WRITE_SIZE], const char *filename) {
         bytes_written = write(fd, &output[total_written], 1); 
 
         if (bytes_written < 0) {
+            printf("Error number: %d\n", errno);
             perror("Error writing to file");
-            close(fd);
             return 0;
         }
 
         total_written += bytes_written; // Atualiza a quantidade de bytes escritos
     }
 
-    close(fd);
-
     return 0;
 }
 
-int readFiles(char* dir_path) {
+int readFiles(char* path) {
 
     struct dirent *file;
-    DIR *dir = opendir(dir_path);
+    DIR *dir = opendir(path);
     //int file_count = 0;
 
     if (dir == NULL) {
@@ -202,16 +215,28 @@ int readFiles(char* dir_path) {
         return -1; 
     }
 
-    while((file = readdir(dir)) != NULL) {
+    size_t path_len = strlen(path);
+    char aux_path[path_len + MAX_PATH];
+    // Itera sobre todos os arquivos no diretório
+    while ((file = readdir(dir)) != NULL) {
         
+        // Verifica se o arquivo corresponde ao formato esperado
         if (is_job_file(file->d_name)) {
+
             printf("fileName: %s\n", file->d_name);
-            process_file(file->d_name);
+
+            snprintf(aux_path, sizeof(aux_path), "%s/%s", path, file->d_name);
+
+            printf("filePath: %s\n", aux_path);
+
+            process_file(aux_path);  // Processa o arquivo
         }
+
         
     }
 
+    kvs_terminate();
+
+    closedir(dir);  // Fecha o diretório após a leitura
     return 0;
-
-
 }
