@@ -25,51 +25,75 @@ int is_job_file(const char *filename) {
 }
 
 
-char* get_filename(const char *input_filename, char extension[EXTENSION]) {
-    // Verifica se o arquivo tem a extensão .job
-    printf("Extension: %s\n", input_filename);
-    const char *ext = strrchr(input_filename, '.'); // Encontra o último ponto (.)
+/**
+ * Modifica o caminho do arquivo, alterando, adicionando ou removendo extensões.
+ * 
+ * - Para remover a extensão: passe `new_ext` como uma string vazia ("").
+ * - Para adicionar uma nova extensão: passe `old_ext` como NULL.
+ * - Para substituir a extensão: forneça tanto `old_ext` quanto `new_ext`.
+ * 
+ * @param file_path Caminho original do arquivo.
+ * @param old_ext Extensão existente esperada (ou NULL para ignorar).
+ * @param new_ext Nova extensão desejada (ou "" para remover).
+ * @return Caminho alterado ou NULL em caso de erro.
+ */
+char *modify_file_path(const char *file_path, const char *old_ext, const char *new_ext) {
     
-    if (ext != NULL && strcmp(ext, ".job") == 0) {
-        // Cria um buffer para armazenar o novo nome do arquivo
-        static char output_filename[MAX_WRITE_SIZE];
-        
-        // Copia o nome do arquivo sem a extensão ".job"
-        size_t length = (size_t)(ext - input_filename);
-        strncpy(output_filename, input_filename, length);
-        
-        // Adiciona a nova extensão ".out"
-        strcpy(output_filename + (ext - input_filename), extension);
-        printf("OutputFilename: %s\n", output_filename);
-        return output_filename;
-    } else {
-        // Se não for um arquivo .job, retorna NULL ou um nome default
-        return NULL;
+    const char *ext = NULL;
+    if(old_ext != NULL){
+        ext = strrchr(file_path, '.');
+    } // Encontra o último ponto (.)
+
+    size_t file_path_length = strlen(file_path);
+
+    // Buffer para a nova string (aloca espaço suficiente)
+    size_t new_length = file_path_length + (new_ext ? strlen(new_ext) : 0) + 1;
+    char *result = malloc(new_length);
+    if (!result) {
+        return NULL; // Falha ao alocar memória
     }
-}
 
-void remove_job_extension(const char *file_path, char *output_path) {
-    // Encontra o último ponto (.) para verificar a extensão
-    const char *ext = strrchr(file_path, '.');
+    // Verifica se deve remover ou substituir uma extensão existente
+    if (ext != NULL && (old_ext == NULL || strcmp(ext, old_ext) == 0)) {
+        size_t length = (size_t)(ext - file_path); // Calcula o comprimento antes da extensão
+        strncpy(result, file_path, length);       // Copia o nome sem a extensão antiga
+        result[length] = '\0';                   // Garante terminação da string
 
-    // Verifica se encontrou um ponto e se a extensão é ".job"
-    if (ext != NULL && strcmp(ext, ".job") == 0) {
-        // Garante que a diferença (ext - file_path) é positiva e dentro do tamanho do arquivo
-        if (ext > file_path) {
-            size_t length = (size_t)(ext - file_path); // Converte para size_t
-            strncpy(output_path, file_path, length);   // Copia o caminho até o ponto
-            output_path[length] = '\0';                 // Garante que a string seja terminada com '\0'
-        } else {
-            // Se não puder calcular a diferença, apenas copia o caminho original
-            strncpy(output_path, file_path, MAX_WRITE_SIZE);
-            output_path[MAX_WRITE_SIZE - 1] = '\0'; // Garante que a string seja terminada corretamente
+        // Adiciona a nova extensão, se fornecida
+        if (new_ext && new_ext[0] != '\0') {
+            strcat(result, new_ext);
         }
-    } else {
-        // Se não for um arquivo .job, apenas copia o caminho original
-        strncpy(output_path, file_path, MAX_WRITE_SIZE);
-        output_path[MAX_WRITE_SIZE - 1] = '\0';  // Garante que a string seja terminada corretamente
+        return result; // Sucesso
     }
+
+    // Caso não seja necessário alterar ou adicionar uma extensão nova
+    if (old_ext == NULL && new_ext && new_ext[0] != '\0') {
+        snprintf(result, new_length, "%s%s", file_path, new_ext);
+        return result; // Sucesso
+    }
+
+    // Caso contrário, copia o nome original sem alterações
+    strncpy(result, file_path, new_length);
+
+    printf("fileResult: %s\n", result);
+    result[new_length - 1] = '\0'; // Garante terminação
+    return result;
 }
+
+/**
+ * Remove uma extensão específica de um caminho de arquivo.
+ */
+char *remove_extension(const char *file_path, const char *ext) {
+    return modify_file_path(file_path, ext, "");
+}
+
+/**
+ * Adiciona uma extensão específica a um caminho de arquivo.
+ */
+char *add_extension(const char *file_path, const char *ext) {
+    return modify_file_path(file_path, NULL, ext);
+}
+
 
 int process_file(const char* file_path) {
 
@@ -81,8 +105,7 @@ int process_file(const char* file_path) {
         perror("Error opening file\n");
     }
 
-    
-    char* out_file_path = get_filename(file_path, ".out");
+    char* out_file_path = modify_file_path(file_path, ".job",".out");
 
     int fd_out = open(out_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
     printf("Opening output file: %s\n", out_file_path);
@@ -92,7 +115,6 @@ int process_file(const char* file_path) {
         perror("Error opening file\n");
     }
 
-    char filename_NoExtension[MAX_WRITE_SIZE];
     char aux_path[MAX_WRITE_SIZE];
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
@@ -132,7 +154,7 @@ int process_file(const char* file_path) {
                 if (kvs_read(num_pairs, keys, output)) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
-                writeInFile(output, fd_out);
+                write_in_file(output, fd_out);
 
                 break;
 
@@ -148,13 +170,13 @@ int process_file(const char* file_path) {
                 if (kvs_delete(num_pairs, keys, output)) {
                     fprintf(stderr, "Failed to delete pair\n");
                 }
-                writeInFile(output, fd_out);
+                write_in_file(output, fd_out);
                 break;
 
             case CMD_SHOW:
 
                 kvs_show(output);
-                writeInFile(output, fd_out);
+                write_in_file(output, fd_out);
                 break;
 
             case CMD_WAIT:
@@ -164,7 +186,8 @@ int process_file(const char* file_path) {
                 }
 
                 if (delay > 0) {
-                    printf("Waiting...\n");
+                    strcpy(output, "Waiting...\n");
+                    write_in_file(output, fd_out);
                     kvs_wait(delay);
                 }
                 break;
@@ -173,23 +196,20 @@ int process_file(const char* file_path) {
             
                 backupCounter++;
                 printf("BackupCounter: %d\n", backupCounter);
-                if (kvs_backup(output)) {
+                            
+                char *file_path_no_ext = remove_extension(file_path, ".job");
+                            
+                snprintf(aux_path, MAX_PATH + MAX_WRITE_SIZE, "%s-%d", file_path_no_ext, backupCounter);
+                printf("filePathNoExtension: %s\n", file_path_no_ext);
+
+                free(file_path_no_ext);
+                char* backup_file_path = add_extension(aux_path, ".bck");
+
+                if (kvs_backup(backup_file_path)) { // Passa o caminho para `kvs_backup`
                     fprintf(stderr, "Failed to perform backup.\n");
                 }
-                
-                remove_job_extension(file_path,filename_NoExtension);
-                
-                snprintf(aux_path, PATH_MAX + MAX_WRITE_SIZE, "%s-%d.job", filename_NoExtension, backupCounter);
 
-                char* backup_file_path = get_filename(aux_path, ".bck");
-
-                if (backup_file_path == NULL) {
-                    fprintf(stderr, "Error: Failed to generate backup file name.\n");
-                    return -1; // Retorna um código de erro ou lida com a falha apropriadamente
-                }
-
-                int fBackup = open(backup_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                writeInFile(output, fBackup);
+                free(backup_file_path); // Certifique-se de liberar o caminho após uso
                 break;
 
             case CMD_INVALID:
@@ -215,14 +235,16 @@ int process_file(const char* file_path) {
 
             case EOC:
                 // kvs_terminate();
+                free(out_file_path);
                 close(fd);
+                close(fd_out);
                 return 0;
         }
     }
 
 }
 
-int writeInFile(char output[MAX_WRITE_SIZE], int fd) {
+int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
 
 
     printf("outputToWrite: %s\n", output);

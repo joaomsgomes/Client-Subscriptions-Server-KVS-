@@ -7,6 +7,7 @@
 
 #include "kvs.h"
 #include "constants.h"
+#include "fileManipulation.h"
 
 static struct HashTable* kvs_table = NULL;
 
@@ -153,7 +154,7 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
   }
 }
 
-int kvs_backup(char output[MAX_WRITE_SIZE]) {
+int kvs_backup(const char* backup_file_path) {
     
     pid_t pid = fork();
     
@@ -163,8 +164,20 @@ int kvs_backup(char output[MAX_WRITE_SIZE]) {
     }
 
     if (pid == 0) { // Processo Filho
-        kvs_show(output);
-        printf("OUTPUT BACKUP: %s\n", output);
+        char output[MAX_WRITE_SIZE];
+        kvs_show(output); // Gera a tabela
+        printf("Backup FILEPATH: %s\n", backup_file_path);
+        int fBackup = open(backup_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fBackup < 0) {
+            perror("Failed to open backup file");
+            _exit(1); // Saída com erro
+        }
+
+        write_in_file(output, fBackup); // Escreve os dados no arquivo
+        close(fBackup);
+        
+        printf("Backup completed: %s\n", backup_file_path);
+        _exit(0); // Termina o filho corretamente
     }
 
     return 0;
