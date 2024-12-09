@@ -51,23 +51,30 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
   return 0;
 }
 
-int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE]) {
+int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_WRITE_SIZE]) {
+  
   if (kvs_table == NULL) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
 
-  printf("[");
+  memset(output, 0, MAX_WRITE_SIZE);
+
+  char output_temp[MAX_WRITE_SIZE];
+  
+  strcat(output, "[");
   for (size_t i = 0; i < num_pairs; i++) {
     char* result = read_pair(kvs_table, keys[i]);
     if (result == NULL) {
-      printf("(%s,KVSERROR)", keys[i]);
+      snprintf(output_temp, MAX_WRITE_SIZE, "(%s,KVSERROR)", keys[i]);
+      strcat(output,output_temp);
     } else {
-      printf("(%s,%s)", keys[i], result);
+      snprintf(output_temp, MAX_WRITE_SIZE, "(%s,%s)", keys[i], result);
+      strcat(output, output_temp);
     }
     free(result);
   }
-  printf("]\n");
+  strcat(output, "]");
   return 0;
 }
 
