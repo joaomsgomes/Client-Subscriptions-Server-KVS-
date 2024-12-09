@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "kvs.h"
 #include "constants.h"
@@ -107,7 +109,9 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_W
     return 1;
   }
   int aux = 0;
+  printf("Output KVS DELETE: %s\n", output);
   memset(output, 0, MAX_WRITE_SIZE);
+  printf("Output KVS DELETE: %s\n", output);
 
   char output_temp[MAX_WRITE_SIZE];
 
@@ -129,20 +133,8 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_W
   return 0;
 }
 
-/*
 void kvs_show(char output[MAX_WRITE_SIZE]) {
-  for (int i = 0; i < TABLE_SIZE; i++) {
-    KeyNode *keyNode = kvs_table->table[i];
-    while (keyNode != NULL) {
-      printf("(%s, %s)\n", keyNode->key, keyNode->value);
-      keyNode = keyNode->next; // Move to the next node
-    }
-  }
-}
-*/
-
-void kvs_show(char output[MAX_WRITE_SIZE]) {
-    // Começa com uma string vazia
+    
   memset(output, 0, MAX_WRITE_SIZE);
 
   for (int i = 0; i < TABLE_SIZE; i++) {
@@ -156,13 +148,26 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
       strcat(output, ")\n");
   
 
-      keyNode = keyNode->next; // Move para o próximo nó
+      keyNode = keyNode->next;
     }
   }
 }
 
-int kvs_backup() {
-  return 0;
+int kvs_backup(char output[MAX_WRITE_SIZE]) {
+    
+    pid_t pid = fork();
+    
+    if (pid < 0) {
+        perror("Fork failed for backup");
+        return -1; // Erro ao criar o processo
+    }
+
+    if (pid == 0) { // Processo Filho
+        kvs_show(output);
+        printf("OUTPUT BACKUP: %s\n", output);
+    }
+
+    return 0;
 }
 
 void kvs_wait(unsigned int delay_ms) {
