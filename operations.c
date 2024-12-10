@@ -4,6 +4,8 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <semaphore.h>
+#include <sys/wait.h>
 
 #include "kvs.h"
 #include "constants.h"
@@ -11,6 +13,32 @@
 
 static struct HashTable* kvs_table = NULL;
 
+sem_t *backup_sem; // Semáforo global para controlar backups
+
+int ongoingbackups;
+
+// Inicializa o semáforo no processo principal
+void initialize_semaphore(int maxBackups) {
+    backup_sem = sem_open("/backup_sem", O_CREAT, 0644, maxBackups);
+    if (backup_sem == SEM_FAILED) {
+        perror("Failed to create semaphore");
+        exit(1);
+    }
+}
+
+// Fecha e remove o semáforo
+void cleanup_semaphore() {
+    sem_close(backup_sem);
+    sem_unlink("/backup_sem");
+}
+
+void wait_for_backup_slot() {
+    sem_wait(backup_sem); // Decrementa o contador do semáforo
+}
+
+void release_backup_slot() {
+    sem_post(backup_sem); // Incrementa o contador do semáforo
+}
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -110,9 +138,8 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_W
     return 1;
   }
   int aux = 0;
-  printf("Output KVS DELETE: %s\n", output);
+
   memset(output, 0, MAX_WRITE_SIZE);
-  printf("Output KVS DELETE: %s\n", output);
 
   char output_temp[MAX_WRITE_SIZE];
 
@@ -154,25 +181,40 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
   }
 }
 
-int kvs_backup(const char* backup_file_path, int backupCounter, int maxBackups) {
-    
-    printf("BackupCounter: %d / MaxBackups: %d\n", backupCounter, maxBackups);
-
-    wait_for_backup_slot(backupCounter,maxBackups);
+int kvs_backup(const char* file_path, int backupCounter) {
 
     pid_t pid = fork();
     
     if (pid < 0) {
         perror("Fork failed for backup");
+        release_backup_slot(); // Libera o slot no caso de erro
         return -1; // Erro ao criar o processo
     }
 
     if (pid == 0) {
 
+        char *file_path_no_ext = remove_extension(file_path, ".job");
+        char aux_path[MAX_WRITE_SIZE];                        
+        snprintf(aux_path, MAX_PATH + MAX_WRITE_SIZE, "%s-%d", file_path_no_ext, backupCounter);
+        // printf("filePathNoExtension: %s\n", file_path_no_ext);
 
+        free(file_path_no_ext);
+        char* backup_file_path = add_extension(aux_path, ".bck");
+
+        printf("Process %d: Attempting to acquire backup slot...\n", getpid());
+        int slots_available;
+        sem_getvalue(backup_sem, &slots_available);
+        printf("Slots available: %d\n", slots_available);
+
+        wait_for_backup_slot(); // Aguarda vaga para backup
+        printf("XX Process %d: Acquired backup slot. Starting backup...\n", getpid());
+
+
+        sleep(1);
+
+        // Código do processo filho
         char output[MAX_WRITE_SIZE];
         kvs_show(output); // Gera a tabela
-        printf("Backup FILEPATH: %s\n", backup_file_path);
         int fBackup = open(backup_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fBackup < 0) {
             perror("Failed to open backup file");
@@ -181,10 +223,18 @@ int kvs_backup(const char* backup_file_path, int backupCounter, int maxBackups) 
 
         write_in_file(output, fBackup); // Escreve os dados no arquivo
         close(fBackup);
-        
-        printf("Backup completed: %s\n", backup_file_path);
+
+        printf("Process %d: Backup completed: %s\n", getpid(), backup_file_path);
+        printf("OO Process %d: Backup finished. Releasing slot...\n\n", getpid());
+        release_backup_slot(); // Libera o slot após o término do backup
+        free(backup_file_path);
         _exit(0); // Termina o filho corretamente
     }
+
+    // Código do processo pai
+    //waitpid(pid, NULL, 0); // Aguarda o filho terminar
+    //printf("OO Process %d: Backup finished. Releasing slot...\n\n", getpid());
+    // release_backup_slot(); // Libera o slot após o término do backup
 
     return 0;
 }

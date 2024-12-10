@@ -18,13 +18,15 @@ int main(int argc, char *argv[]) {
   char* dir = argv[1]; 
   int maxBackups = atoi(argv[2]);
   //char cwd[MAX_PATH]; //Buffer to Store Directories
-  
+  initialize_semaphore(maxBackups);
+
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
     return 1;
   }
 
-  readFiles(dir, maxBackups);
-
+  readFiles(dir);
+  cleanup_semaphore();
+  
   return 0;
 }

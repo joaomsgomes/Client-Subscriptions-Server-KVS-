@@ -38,7 +38,7 @@ void kvs_show(char output[MAX_WRITE_SIZE]);
 /// Creates a backup of the KVS state and stores it in the correspondent
 /// backup file
 /// @return 0 if the backup was successful, 1 otherwise.
-int kvs_backup(const char* backup_file_path, int BackupCounter, int maxBackups);
+int kvs_backup(const char* backup_file_path, int backupCounter);
 
 /// Waits for the last backup to be called.
 void kvs_wait_backup();
@@ -46,5 +46,8 @@ void kvs_wait_backup();
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
+
+void initialize_semaphore(int maxBackups);
+void cleanup_semaphore();
 
 #endif  // KVS_OPERATIONS_H

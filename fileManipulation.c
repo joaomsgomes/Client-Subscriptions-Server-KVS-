@@ -95,11 +95,11 @@ char *add_extension(const char *file_path, const char *ext) {
     return modify_file_path(file_path, NULL, ext);
 }
 
-
+/*
 void wait_for_backup_slot(int backupCounter, int maxBackups) {
 
 
-    if (backupCounter >= maxBackups) {
+    if (backupCounter == maxBackups) {
         // Aguarda que pelo menos um backup termine
         printf("Estou à espera\n");
         pid_t pid = waitpid(-1, NULL, 0); // -1 significa "qualquer filho"
@@ -114,8 +114,8 @@ void wait_for_backup_slot(int backupCounter, int maxBackups) {
     }
 
 }
-
-int process_file(const char* file_path, int maxBackups) {
+*/
+int process_file(const char* file_path) {
 
     int fd = open(file_path,O_RDONLY); 
     printf("Opening file: %s\n", file_path);
@@ -135,7 +135,6 @@ int process_file(const char* file_path, int maxBackups) {
         perror("Error opening file\n");
     }
 
-    char aux_path[MAX_WRITE_SIZE];
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     unsigned int delay;
@@ -215,21 +214,13 @@ int process_file(const char* file_path, int maxBackups) {
             case CMD_BACKUP:
 
                 backupCounter++;
-                printf("BackupCounter: %d\n", backupCounter);
-                            
-                char *file_path_no_ext = remove_extension(file_path, ".job");
-                            
-                snprintf(aux_path, MAX_PATH + MAX_WRITE_SIZE, "%s-%d", file_path_no_ext, backupCounter);
-                printf("filePathNoExtension: %s\n", file_path_no_ext);
+                // printf("BackupCounter: %d\n", backupCounter);
 
-                free(file_path_no_ext);
-                char* backup_file_path = add_extension(aux_path, ".bck");
-
-                if (kvs_backup(backup_file_path, backupCounter, maxBackups)) { // Passa o caminho para `kvs_backup`
+                if (kvs_backup(file_path, backupCounter)) { // Passa o caminho para `kvs_backup`
                     fprintf(stderr, "Failed to perform backup.\n");
                 }
 
-                free(backup_file_path); // Certifique-se de liberar o caminho após uso
+
                 break;
 
             case CMD_INVALID:
@@ -255,6 +246,7 @@ int process_file(const char* file_path, int maxBackups) {
 
             case EOC:
                 // kvs_terminate();
+                wait(NULL);
                 free(out_file_path);
                 close(fd);
                 close(fd_out);
@@ -267,7 +259,7 @@ int process_file(const char* file_path, int maxBackups) {
 int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
 
 
-    printf("outputToWrite: %s\n", output);
+    // printf("outputToWrite: %s\n", output);
     
     ssize_t bytes_written = 0;
     ssize_t total_written = 0;
@@ -288,7 +280,7 @@ int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
     return 0;
 }
 
-int readFiles(char* path, int maxBackups) {
+int readFiles(char* path) {
 
     struct dirent *file;
     
@@ -314,7 +306,7 @@ int readFiles(char* path, int maxBackups) {
 
             printf("filePath: %s\n", aux_path);
 
-            process_file(aux_path, maxBackups);  // Processa o arquivo
+            process_file(aux_path);  // Processa o arquivo
         }
 
         
