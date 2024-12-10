@@ -7,16 +7,20 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "constants.h"
 #include "parser.h"
 #include "fileManipulation.h"
 #include "operations.h"
 
+
+
 int is_job_file(const char *filename) {
     
     const char *ext = strrchr(filename, '.');
-
+    //printf("Extension: %s\n", ext);
     
     if (ext == NULL || strcmp(ext, ".job") != 0) {
         return 0;
@@ -76,7 +80,6 @@ char *modify_file_path(const char *file_path, const char *old_ext, const char *n
     // Caso contrário, copia o nome original sem alterações
     strncpy(result, file_path, new_length);
 
-    printf("fileResult: %s\n", result);
     result[new_length - 1] = '\0'; // Garante terminação
     return result;
 }
@@ -95,40 +98,21 @@ char *add_extension(const char *file_path, const char *ext) {
     return modify_file_path(file_path, NULL, ext);
 }
 
-/*
-void wait_for_backup_slot(int backupCounter, int maxBackups) {
 
-
-    if (backupCounter == maxBackups) {
-        // Aguarda que pelo menos um backup termine
-        printf("Estou à espera\n");
-        pid_t pid = waitpid(-1, NULL, 0); // -1 significa "qualquer filho"
-        if (pid > 0) {
-            printf("DECREMENTA\n");
-            backupCounter--; // Reduz o contador de backups ativos
-            printf("Backup process %d finished. Active backups: %d\n", pid, backupCounter);
-        } else {
-            perror("Error in waitpid");
-        }
-
-    }
-
-}
-*/
 int process_file(const char* file_path) {
 
     int fd = open(file_path,O_RDONLY); 
-    printf("Opening file: %s\n", file_path);
+    //printf("Opening file Thread ID: %s %lu\n", file_path, thread_self());
 
     if (fd < 0) {
         printf("Error number: %d\n", errno);
         perror("Error opening file\n");
     }
-
+    //printf("vai modificar o ficheiro\n");
     char* out_file_path = modify_file_path(file_path, ".job",".out");
-
+    //printf("abrir fd: %s\n", out_file_path);
     int fd_out = open(out_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    printf("Opening output file: %s\n", out_file_path);
+    //printf("Opening output file: %s\n", out_file_path);
 
     if (fd_out < 0) {
         printf("Error number: %d\n", errno);
@@ -141,13 +125,12 @@ int process_file(const char* file_path) {
     size_t num_pairs;
     char output[MAX_WRITE_SIZE];
     int backupCounter = 0;
-
+    
     while (1) {
-        
+        //printf("newCommand\n");
         switch (get_next(fd)) {
 
             case CMD_WRITE:
-
                 num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_pairs == 0) {
@@ -162,9 +145,9 @@ int process_file(const char* file_path) {
                 break;
 
             case CMD_READ:
-
+                
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-
+                
                 if (num_pairs == 0) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
                     
@@ -174,7 +157,7 @@ int process_file(const char* file_path) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
                 write_in_file(output, fd_out);
-
+                
                 break;
 
             case CMD_DELETE:
@@ -277,43 +260,5 @@ int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
         total_written += bytes_written; // Atualiza a quantidade de bytes escritos
     }
 
-    return 0;
-}
-
-int readFiles(char* path) {
-
-    struct dirent *file;
-    
-    DIR *dir = opendir(path);
-    //int file_count = 0;
-
-    if (dir == NULL) {
-        perror("Error Opening Directory\n");
-        return -1; 
-    }
-
-    size_t path_len = strlen(path);
-    char aux_path[path_len + MAX_PATH];
-    // Itera sobre todos os arquivos no diretório
-    while ((file = readdir(dir)) != NULL) {
-        
-        // Verifica se o arquivo corresponde ao formato esperado
-        if (is_job_file(file->d_name)) {
-
-            printf("fileName: %s\n", file->d_name);
-
-            snprintf(aux_path, sizeof(aux_path), "%s/%s", path, file->d_name);
-
-            printf("filePath: %s\n", aux_path);
-
-            process_file(aux_path);  // Processa o arquivo
-        }
-
-        
-    }
-
-    kvs_terminate();
-
-    closedir(dir);  // Fecha o diretório após a leitura
     return 0;
 }
