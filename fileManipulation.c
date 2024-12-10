@@ -6,6 +6,7 @@
 #include <fcntl.h> 
 #include <string.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #include "constants.h"
 #include "parser.h"
@@ -95,7 +96,26 @@ char *add_extension(const char *file_path, const char *ext) {
 }
 
 
-int process_file(const char* file_path) {
+void wait_for_backup_slot(int backupCounter, int maxBackups) {
+
+
+    if (backupCounter >= maxBackups) {
+        // Aguarda que pelo menos um backup termine
+        printf("Estou à espera\n");
+        pid_t pid = waitpid(-1, NULL, 0); // -1 significa "qualquer filho"
+        if (pid > 0) {
+            printf("DECREMENTA\n");
+            backupCounter--; // Reduz o contador de backups ativos
+            printf("Backup process %d finished. Active backups: %d\n", pid, backupCounter);
+        } else {
+            perror("Error in waitpid");
+        }
+
+    }
+
+}
+
+int process_file(const char* file_path, int maxBackups) {
 
     int fd = open(file_path,O_RDONLY); 
     printf("Opening file: %s\n", file_path);
@@ -193,7 +213,7 @@ int process_file(const char* file_path) {
                 break;
 
             case CMD_BACKUP:
-            
+
                 backupCounter++;
                 printf("BackupCounter: %d\n", backupCounter);
                             
@@ -205,7 +225,7 @@ int process_file(const char* file_path) {
                 free(file_path_no_ext);
                 char* backup_file_path = add_extension(aux_path, ".bck");
 
-                if (kvs_backup(backup_file_path)) { // Passa o caminho para `kvs_backup`
+                if (kvs_backup(backup_file_path, backupCounter, maxBackups)) { // Passa o caminho para `kvs_backup`
                     fprintf(stderr, "Failed to perform backup.\n");
                 }
 
@@ -224,7 +244,7 @@ int process_file(const char* file_path) {
                     "  DELETE [key,key2,...]\n"
                     "  SHOW\n"
                     "  WAIT <delay_ms>\n"
-                    "  BACKUP\n" // Not implemented
+                    "  BACKUP\n" 
                     "  HELP\n"
                 );
 
@@ -268,7 +288,7 @@ int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
     return 0;
 }
 
-int readFiles(char* path) {
+int readFiles(char* path, int maxBackups) {
 
     struct dirent *file;
     
@@ -294,7 +314,7 @@ int readFiles(char* path) {
 
             printf("filePath: %s\n", aux_path);
 
-            process_file(aux_path);  // Processa o arquivo
+            process_file(aux_path, maxBackups);  // Processa o arquivo
         }
 
         

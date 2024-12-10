@@ -17,17 +17,14 @@ int main(int argc, char *argv[]) {
 
   char* dir = argv[1]; 
   int maxBackups = atoi(argv[2]);
-  char cwd[MAX_PATH]; //Buffer to Store Directories
-
-  char* currDir = getcwd(cwd, sizeof(cwd));
-  printf("Current Directory: %s  maxBackups: %d Directory: %s\n", currDir, maxBackups, dir);
+  //char cwd[MAX_PATH]; //Buffer to Store Directories
   
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
     return 1;
   }
 
-  readFiles(dir);
+  readFiles(dir, maxBackups);
 
   return 0;
 }

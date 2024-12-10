@@ -154,8 +154,12 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
   }
 }
 
-int kvs_backup(const char* backup_file_path) {
+int kvs_backup(const char* backup_file_path, int backupCounter, int maxBackups) {
     
+    printf("BackupCounter: %d / MaxBackups: %d\n", backupCounter, maxBackups);
+
+    wait_for_backup_slot(backupCounter,maxBackups);
+
     pid_t pid = fork();
     
     if (pid < 0) {
@@ -163,7 +167,9 @@ int kvs_backup(const char* backup_file_path) {
         return -1; // Erro ao criar o processo
     }
 
-    if (pid == 0) { // Processo Filho
+    if (pid == 0) {
+
+
         char output[MAX_WRITE_SIZE];
         kvs_show(output); // Gera a tabela
         printf("Backup FILEPATH: %s\n", backup_file_path);
