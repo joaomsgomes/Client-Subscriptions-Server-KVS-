@@ -1,5 +1,5 @@
 #include "parser.h"
-
+#include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -238,11 +238,13 @@ size_t parse_read_delete(int fd, char keys[][MAX_STRING_SIZE], size_t max_keys, 
     return 0;
   }
 
+
   size_t num_keys = 0;
   char key[max_string_size];
   while (num_keys < max_keys) {
     int output = read_string(fd, key, max_string_size);
     if(output < 0 || output == 1) {
+
       cleanup(fd);
       return 0;
     }
