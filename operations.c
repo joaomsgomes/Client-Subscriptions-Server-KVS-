@@ -13,10 +13,7 @@
 
 static struct HashTable* kvs_table = NULL;
 
-
-
-int ongoingbackups;
-
+int ongoingBackups = 0;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -60,7 +57,6 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE], char values[][MAX_
   return 0;
 }
 
-// Função de comparação para ordenar as chaves em ordem alfabética
 int compare_keys(const void *a, const void *b) {
     return strcmp(*(const char **)a, *(const char **)b);
 }
@@ -76,22 +72,22 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_WRI
 
   char output_temp[MAX_WRITE_SIZE];
 
-  // Criação de um vetor de ponteiros para as chaves
+  
   char *sorted_keys[num_pairs];
   for (size_t i = 0; i < num_pairs; i++) {
     sorted_keys[i] = keys[i];
   }
 
-  // Ordenação das chaves
+  
   qsort(sorted_keys, num_pairs, sizeof(char*), compare_keys);
 
   strcat(output, "[");
 
   for (size_t i = 0; i < num_pairs; i++) {
-    // Obtém o valor da chave
+    
     char* result = read_pair(kvs_table, sorted_keys[i]);
 
-    // Diagnóstico: verificar o valor de result
+    
     if (result == NULL) {
       snprintf(output_temp, MAX_WRITE_SIZE, "(%s,KVSERROR)", sorted_keys[i]);
       strcat(output, output_temp);
@@ -99,7 +95,7 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_WRI
       snprintf(output_temp, MAX_WRITE_SIZE, "(%s,%s)", sorted_keys[i], result);
       strcat(output, output_temp);
       
-      // Certifique-se de que result deve ser liberado
+      
       free(result);
     }
   }
@@ -134,7 +130,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], char output[MAX_W
   if (aux) {
     strcat(output, "]\n");
   }
-  // printf("output: %s\n", output);
+  
 
   return 0;
 }
@@ -161,18 +157,21 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
 
 int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
 
-    backupCounter++;
-
-    if (backupCounter == maxBackups) {
+    if (ongoingBackups == maxBackups) {
+      printf("Backup number %d is waiting for a backup to end...\n", backupCounter);
+      printf("ONGOING BACKUPS: %d\n", ongoingBackups);
       wait(NULL);
+      ongoingBackups--;
     }
 
+    ongoingBackups++;
+    printf("Process %d: Starting Backup: %s-%d\n", getpid(), file_path, backupCounter);
     pid_t pid = fork();
     
     if (pid < 0) {
         perror("Fork failed for backup");
-        
-        return -1; // Erro ao criar o processo
+        ongoingBackups--;
+        return -1; 
     }
 
     if (pid == 0) {
@@ -180,36 +179,26 @@ int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
         char *file_path_no_ext = remove_extension(file_path, ".job");
         char aux_path[MAX_WRITE_SIZE];                        
         snprintf(aux_path, MAX_PATH + MAX_WRITE_SIZE, "%s-%d", file_path_no_ext, backupCounter);
-        // printf("filePathNoExtension: %s\n", file_path_no_ext);
-
+        
+        //sleep(1);
         free(file_path_no_ext);
         char* backup_file_path = add_extension(aux_path, ".bck");
-
-        printf("Process %d: Attempting to acquire backup slot...\n", getpid());
-        
-        printf("XX Process %d: Acquired backup slot. Starting backup...\n", getpid());
-
-
-        sleep(1);
-
-        // Código do processo filho
+              
         char output[MAX_WRITE_SIZE];
-        kvs_show(output); // Gera a tabela
+        kvs_show(output); 
         int fBackup = open(backup_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fBackup < 0) {
             perror("Failed to open backup file");
-            _exit(1); // Saída com erro
+            _exit(1); 
         }
 
-        write_in_file(output, fBackup); // Escreve os dados no arquivo
+        write_in_file(output, fBackup); 
         close(fBackup);
 
         printf("Process %d: Backup completed: %s\n", getpid(), backup_file_path);
-        printf("OO Process %d: Backup finished. Releasing slot...\n\n", getpid());
         
         free(backup_file_path);
         _exit(0);
-        backupCounter--;
     }
 
     return 0;

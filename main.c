@@ -16,8 +16,6 @@
 #include "operations.h"
 #include "fileManipulation.h"
 
-pthread_rwlock_t rwlock;
-
 int threads_created = 0;
 
 typedef struct {
@@ -67,13 +65,10 @@ int process_file(thread_data* t_data) {
 
             case CMD_WRITE:
 
-                pthread_rwlock_wrlock(&rwlock);
-
                 num_pairs = parse_write(fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_pairs == 0) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
-                    pthread_rwlock_unlock(&rwlock);
                     break;
                 }
 
@@ -81,19 +76,14 @@ int process_file(thread_data* t_data) {
                     fprintf(stderr, "Failed to write pair\n");
                 }
 
-                pthread_rwlock_unlock(&rwlock);
-
                 break;
 
             case CMD_READ:
-                
-                pthread_rwlock_rdlock(&rwlock);
 
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
                 //printf("NumPairs: %ld\n", num_pairs);
                 if (num_pairs == 0) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
-                    pthread_rwlock_unlock(&rwlock);
                     break;
                 }
 
@@ -101,20 +91,16 @@ int process_file(thread_data* t_data) {
                     fprintf(stderr, "Failed to read pair\n");
                 }
                 write_in_file(output, fd_out);
-                
-                pthread_rwlock_unlock(&rwlock);
+
 
                 break;
 
             case CMD_DELETE:
 
-                pthread_rwlock_wrlock(&rwlock); // Adquire lock de escrita.
-
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_pairs == 0) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
-                    pthread_rwlock_unlock(&rwlock); // Libera lock.
                     break;
                 }
 
@@ -124,18 +110,12 @@ int process_file(thread_data* t_data) {
 
                 write_in_file(output, fd_out);
 
-                pthread_rwlock_unlock(&rwlock); // Libera lock após a operação.
-
                 break;
 
             case CMD_SHOW:
 
-                pthread_rwlock_rdlock(&rwlock);
-
                 kvs_show(output);
                 write_in_file(output, fd_out);
-
-                pthread_rwlock_unlock(&rwlock);
 
                 break;
 
@@ -158,14 +138,12 @@ int process_file(thread_data* t_data) {
 
             case CMD_BACKUP:
 
-                
-                pthread_rwlock_wrlock(&rwlock); // Adquire lock de escrita.
 
+                backupCounter++;
+              
                 if (kvs_backup(t_data->file, backupCounter, maxBackups)) {
                     fprintf(stderr, "Failed to perform backup.\n");
                 }
-
-                pthread_rwlock_unlock(&rwlock); // Libera lock.
 
 
                 break;
@@ -192,10 +170,8 @@ int process_file(thread_data* t_data) {
                 break;
 
             case EOC:
-                // kvs_terminate();
 
                 wait(NULL);
-                printf("[Thread End] Thread ID: %d  File: %s\n",t_data->thread_id, t_data->file);
                 t_data->active = 0;
                 free(out_file_path);
                 close(fd);
@@ -208,15 +184,10 @@ int process_file(thread_data* t_data) {
 
 void* thread_process_file(void* arg) {
 
-    thread_data* t = (thread_data*)arg; // Converte o argumento para o tipo correto
+    thread_data* t = (thread_data*)arg;
     printf("[Thread Start] Thread ID: %d  File: %s\n",t->thread_id, t->file);
-    process_file(t); // Função já existente no seu código
+    process_file(t);
 
-    
-    //printf("[Semaphore] Slot released for file: %s\n", file);
-    //printf("[Thread End] Thread ID: %d  File: %s\n", t->thread_id, t->file);
-    //free(t);
-    
     return NULL;
 }
 
@@ -308,8 +279,6 @@ int main(int argc, char *argv[]) {
   char* dir = argv[1]; 
   maxBackups = atoi(argv[2]); 
   maxThreads = maxBackups; 
-  
-  pthread_rwlock_init(&rwlock, NULL);
 
 
   if (maxThreads <= 0) {
@@ -325,7 +294,6 @@ int main(int argc, char *argv[]) {
   }
 
   readFiles(dir);  
-  pthread_rwlock_destroy(&rwlock);
 
   return 0;
 }
