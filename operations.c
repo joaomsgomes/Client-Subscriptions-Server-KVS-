@@ -13,32 +13,10 @@
 
 static struct HashTable* kvs_table = NULL;
 
-sem_t *backup_sem; // Semáforo global para controlar backups
+
 
 int ongoingbackups;
 
-// Inicializa o semáforo no processo principal
-void initialize_semaphore(int maxBackups) {
-    backup_sem = sem_open("/backup_sem", O_CREAT, 0644, maxBackups);
-    if (backup_sem == SEM_FAILED) {
-        perror("Failed to create semaphore");
-        exit(1);
-    }
-}
-
-// Fecha e remove o semáforo
-void cleanup_semaphore() {
-    sem_close(backup_sem);
-    sem_unlink("/backup_sem");
-}
-
-void wait_for_backup_slot() {
-    sem_wait(backup_sem); // Decrementa o contador do semáforo
-}
-
-void release_backup_slot() {
-    sem_post(backup_sem); // Incrementa o contador do semáforo
-}
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -181,13 +159,19 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
   }
 }
 
-int kvs_backup(const char* file_path, int backupCounter) {
+int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
+
+    backupCounter++;
+
+    if (backupCounter == maxBackups) {
+      wait(NULL);
+    }
 
     pid_t pid = fork();
     
     if (pid < 0) {
         perror("Fork failed for backup");
-        release_backup_slot(); // Libera o slot no caso de erro
+        
         return -1; // Erro ao criar o processo
     }
 
@@ -202,11 +186,7 @@ int kvs_backup(const char* file_path, int backupCounter) {
         char* backup_file_path = add_extension(aux_path, ".bck");
 
         printf("Process %d: Attempting to acquire backup slot...\n", getpid());
-        int slots_available;
-        sem_getvalue(backup_sem, &slots_available);
-        printf("Slots available: %d\n", slots_available);
-
-        wait_for_backup_slot(); // Aguarda vaga para backup
+        
         printf("XX Process %d: Acquired backup slot. Starting backup...\n", getpid());
 
 
@@ -226,15 +206,11 @@ int kvs_backup(const char* file_path, int backupCounter) {
 
         printf("Process %d: Backup completed: %s\n", getpid(), backup_file_path);
         printf("OO Process %d: Backup finished. Releasing slot...\n\n", getpid());
-        release_backup_slot(); // Libera o slot após o término do backup
+        
         free(backup_file_path);
-        _exit(0); // Termina o filho corretamente
+        _exit(0);
+        backupCounter--;
     }
-
-    // Código do processo pai
-    //waitpid(pid, NULL, 0); // Aguarda o filho terminar
-    //printf("OO Process %d: Backup finished. Releasing slot...\n\n", getpid());
-    // release_backup_slot(); // Libera o slot após o término do backup
 
     return 0;
 }

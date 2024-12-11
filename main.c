@@ -16,25 +16,27 @@
 #include "operations.h"
 #include "fileManipulation.h"
 
-sem_t thread_semaphore;
-pthread_mutex_t mutex;
-
 pthread_rwlock_t rwlock;
 
-int count_threads = 0;
+int threads_created = 0;
 
 typedef struct {
 
   int thread_id;
   char file[MAX_PATH + MAX_WRITE_SIZE];
+  int active;
 
 } thread_data;
 
 
+int maxBackups = 0;
+int maxThreads = 0;
 
-int process_file(const char* file_path) {
+int process_file(thread_data* t_data) {
 
-    int fd = open(file_path,O_RDONLY); 
+    sleep(1);
+
+    int fd = open(t_data->file,O_RDONLY); 
     //printf("Opening file Thread ID: %s %lu\n", file_path, thread_self());
 
     if (fd < 0) {
@@ -42,7 +44,7 @@ int process_file(const char* file_path) {
         perror("Error opening file\n");
     }
     //printf("vai modificar o ficheiro\n");
-    char* out_file_path = modify_file_path(file_path, ".job",".out");
+    char* out_file_path = modify_file_path(t_data->file, ".job",".out");
     //printf("abrir fd: %s\n", out_file_path);
     int fd_out = open(out_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
     //printf("Opening output file: %s\n", out_file_path);
@@ -144,10 +146,10 @@ int process_file(const char* file_path) {
                 }
 
                 if (delay > 0) {
-                    pthread_mutex_lock(&mutex); // Protege o acesso a `output`.
+                    
                     strcpy(output, "Waiting...\n");
                     write_in_file(output, fd_out);
-                    pthread_mutex_unlock(&mutex); // Libera o acesso a `output`.
+                    
 
                     kvs_wait(delay); // Executa a espera sem acessar `output`.
                 }
@@ -159,8 +161,7 @@ int process_file(const char* file_path) {
                 
                 pthread_rwlock_wrlock(&rwlock); // Adquire lock de escrita.
 
-                backupCounter++;
-                if (kvs_backup(file_path, backupCounter)) {
+                if (kvs_backup(t_data->file, backupCounter, maxBackups)) {
                     fprintf(stderr, "Failed to perform backup.\n");
                 }
 
@@ -192,7 +193,10 @@ int process_file(const char* file_path) {
 
             case EOC:
                 // kvs_terminate();
+
                 wait(NULL);
+                printf("[Thread End] Thread ID: %d  File: %s\n",t_data->thread_id, t_data->file);
+                t_data->active = 0;
                 free(out_file_path);
                 close(fd);
                 close(fd_out);
@@ -206,22 +210,32 @@ void* thread_process_file(void* arg) {
 
     thread_data* t = (thread_data*)arg; // Converte o argumento para o tipo correto
     printf("[Thread Start] Thread ID: %d  File: %s\n",t->thread_id, t->file);
-    process_file(t->file); // Função já existente no seu código
-    
-    //sleep(1);
+    process_file(t); // Função já existente no seu código
 
-    sem_post(&thread_semaphore); // Libera o slot do semáforo após finalizar
+    
     //printf("[Semaphore] Slot released for file: %s\n", file);
-    printf("[Thread End] Thread ID: %d  File: %s\n", t->thread_id, t->file);
-    free(t);
+    //printf("[Thread End] Thread ID: %d  File: %s\n", t->thread_id, t->file);
+    //free(t);
     
     return NULL;
 }
 
 
-
-
 int readFiles(char* path) {
+
+    thread_data* threads_data[maxThreads];
+    pthread_t threads[maxThreads];
+
+    printf("MAXTHREADS %d\n", maxThreads);
+
+    for (int i = 0; i < maxThreads; i++ ) {
+
+        thread_data* t = malloc(sizeof(thread_data));
+        t->thread_id = i;
+        t->active = 1;
+        threads_data[i] = t;
+        
+    }
 
     struct dirent *file;
     DIR *dir = opendir(path);
@@ -232,32 +246,54 @@ int readFiles(char* path) {
 
     size_t path_len = strlen(path);
     char aux_path[path_len + MAX_PATH];
-    pthread_t thread;
+    int i = 0;
 
     while ((file = readdir(dir)) != NULL) {
         
         if (is_job_file(file->d_name)) {
             printf("fileName: %s\n", file->d_name);
             snprintf(aux_path, sizeof(aux_path), "%s/%s", path, file->d_name);
-            //printf("filePath: %s\n", aux_path);
-
-            sem_wait(&thread_semaphore); // Bloqueia se não houver slots disponíveis
-            //printf("[Semaphore] Slot acquired for file: %s\n", aux_path);
-            count_threads++;
-            thread_data* t = malloc(sizeof(thread_data));
-
-            t->thread_id = count_threads;
-            strcpy(t->file, aux_path);
-
-            if (pthread_create(&thread, NULL, thread_process_file,t) != 0) {
-                perror("Failed to create thread\n");
-                sem_post(&thread_semaphore); // Libera o slot no caso de falha
-                continue;
-            }
+            // printf("Aux_path: %s\n", aux_path);
+            //printf("threads created--> %d\n", threads_created);
             
+            if (threads_created < maxThreads) {
+                printf("IFFF\n");
+                strcpy(threads_data[threads_created]->file, aux_path);
+                if (pthread_create(&threads[threads_created], NULL, thread_process_file, threads_data[threads_created]) != 0) {
+                    perror("Failed to create thread\n");
+                    continue;
+                }
+                threads_created++;
+                
+            } else {
+                printf("ELSEE\n");
+                printf("waiting for available thread...\n");
+                while(i < maxThreads) {
+                    if (!threads_data[i]->active) {
+                        printf("Threads Data--> Active: %d // i: %d\n",threads_data[i]->active, i);
+                        strcpy(threads_data[i]->file, aux_path);
+                        threads_data[i]->active = 1;
+
+                        printf("[Thread Reutilized] Thread ID: %d  File: %s\n",threads_data[i]->thread_id, threads_data[i]->file);
+                        process_file(threads_data[i]);
+                        break;
+                    }
+
+                    i++;
+                    if(i == maxThreads) {
+                        i = 0;
+                    }
+                }
+                
+            }
+                
         }
+
     }
-    pthread_join(thread, NULL);
+    for (int j = 0; j < maxThreads; j++) {
+        pthread_join(threads[j], NULL);
+        free(threads_data[j]);
+    }
     closedir(dir);  // Fecha o diretório após a leitura
     return 0;
 }
@@ -270,37 +306,26 @@ int main(int argc, char *argv[]) {
   }
 
   char* dir = argv[1]; 
-  int maxBackups_threads = atoi(argv[2]); 
-
-  pthread_mutex_init(&mutex, NULL);
+  maxBackups = atoi(argv[2]); 
+  maxThreads = maxBackups; 
+  
   pthread_rwlock_init(&rwlock, NULL);
 
 
-  initialize_semaphore(maxBackups_threads);
-
-  if (maxBackups_threads <= 0) {
+  if (maxThreads <= 0) {
         fprintf(stderr, "Invalid thread limit\n");
         return 1;
   }
 
-  if (sem_init(&thread_semaphore, 0,(unsigned int) maxBackups_threads) != 0) {
-        perror("Failed to initialize semaphore\n");
-        return 1;
-  }
+  
 
   if (kvs_init()) {
     fprintf(stderr, "Failed to initialize KVS\n");
-    sem_destroy(&thread_semaphore);
     return 1;
   }
 
-  readFiles(dir);
-
-  pthread_mutex_destroy(&mutex);
+  readFiles(dir);  
   pthread_rwlock_destroy(&rwlock);
-
-
-  cleanup_semaphore();
 
   return 0;
 }
