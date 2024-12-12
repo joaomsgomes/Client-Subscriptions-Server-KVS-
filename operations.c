@@ -4,12 +4,10 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <semaphore.h>
 #include <sys/wait.h>
 
 #include "kvs.h"
 #include "constants.h"
-#include "fileManipulation.h"
 
 static struct HashTable* kvs_table = NULL;
 
@@ -21,6 +19,92 @@ int ongoingBackups = 0;
 static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
+
+int is_job_file(const char *filename) {
+    
+    const char *ext = strrchr(filename, '.');
+    
+    
+    if (ext == NULL || strcmp(ext, ".job") != 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+
+char *modify_file_path(const char *file_path, const char *old_ext, const char *new_ext) {
+    
+    const char *ext = NULL;
+    if (old_ext != NULL) {
+        ext = strrchr(file_path, '.');
+    } 
+
+    size_t file_path_length = strlen(file_path);
+
+    
+    size_t new_length = file_path_length + (new_ext ? strlen(new_ext) : 0) + 1;
+    char *result = malloc(new_length);
+    if (!result) {
+        return NULL;
+    }
+
+    
+    if (ext != NULL && (old_ext == NULL || strcmp(ext, old_ext) == 0)) {
+        size_t length = (size_t)(ext - file_path);
+        strncpy(result, file_path, length);       
+        result[length] = '\0';                   
+
+        
+        if (new_ext && new_ext[0] != '\0') {
+            strcat(result, new_ext);
+        }
+        return result; 
+    }
+
+    
+    if (old_ext == NULL && new_ext && new_ext[0] != '\0') {
+        snprintf(result, new_length, "%s%s", file_path, new_ext);
+        return result;
+    }
+
+    
+    strncpy(result, file_path, new_length);
+
+    result[new_length - 1] = '\0';
+    return result;
+}
+
+
+char *remove_extension(const char *file_path, const char *ext) {
+    return modify_file_path(file_path, ext, "");
+}
+
+
+char *add_extension(const char *file_path, const char *ext) {
+    return modify_file_path(file_path, NULL, ext);
+}
+
+
+int write_in_file(char output[MAX_WRITE_SIZE], int fd) {
+    
+    ssize_t bytes_written = 0;
+    ssize_t total_written = 0;
+
+    while (output[total_written] != '\0') { 
+        bytes_written = write(fd, &output[total_written], 1); 
+
+        if (bytes_written < 0) {
+            perror("Error writing to file");
+            return 0;
+        }
+
+        total_written += bytes_written; // Atualiza a quantidade de bytes escritos
+    }
+
+    return 0;
+}
+
 
 int kvs_init() {
   if (kvs_table != NULL) {
@@ -158,14 +242,12 @@ void kvs_show(char output[MAX_WRITE_SIZE]) {
 int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
 
     if (ongoingBackups == maxBackups) {
-      printf("Backup number %d is waiting for a backup to end...\n", backupCounter);
-      printf("ONGOING BACKUPS: %d\n", ongoingBackups);
       wait(NULL);
       ongoingBackups--;
     }
 
     ongoingBackups++;
-    printf("Process %d: Starting Backup: %s-%d\n", getpid(), file_path, backupCounter);
+    
     pid_t pid = fork();
     
     if (pid < 0) {
@@ -180,7 +262,7 @@ int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
         char aux_path[MAX_WRITE_SIZE];                        
         snprintf(aux_path, MAX_PATH + MAX_WRITE_SIZE, "%s-%d", file_path_no_ext, backupCounter);
         
-        //sleep(1);
+        
         free(file_path_no_ext);
         char* backup_file_path = add_extension(aux_path, ".bck");
               
@@ -195,8 +277,6 @@ int kvs_backup(const char* file_path, int backupCounter, int maxBackups) {
         write_in_file(output, fBackup); 
         close(fBackup);
 
-        printf("Process %d: Backup completed: %s\n", getpid(), backup_file_path);
-        
         free(backup_file_path);
         _exit(0);
     }

@@ -8,13 +8,11 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <pthread.h>
-#include <semaphore.h>
 
 
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
-#include "fileManipulation.h"
 
 int threads_created = 0;
 
@@ -32,23 +30,21 @@ int maxThreads = 0;
 
 int process_file(thread_data* t_data) {
 
-    sleep(1);
-
     int fd = open(t_data->file,O_RDONLY); 
-    //printf("Opening file Thread ID: %s %lu\n", file_path, thread_self());
+    
 
     if (fd < 0) {
-        printf("Error number: %d\n", errno);
+        
         perror("Error opening file\n");
     }
-    //printf("vai modificar o ficheiro\n");
+    
     char* out_file_path = modify_file_path(t_data->file, ".job",".out");
-    //printf("abrir fd: %s\n", out_file_path);
+    
     int fd_out = open(out_file_path,O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    //printf("Opening output file: %s\n", out_file_path);
+    
 
     if (fd_out < 0) {
-        printf("Error number: %d\n", errno);
+        
         perror("Error opening file\n");
     }
 
@@ -60,7 +56,7 @@ int process_file(thread_data* t_data) {
     int backupCounter = 0;
     
     while (1) {
-        //printf("newCommand\n");
+        
         switch (get_next(fd)) {
 
             case CMD_WRITE:
@@ -81,7 +77,7 @@ int process_file(thread_data* t_data) {
             case CMD_READ:
 
                 num_pairs = parse_read_delete(fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-                //printf("NumPairs: %ld\n", num_pairs);
+    
                 if (num_pairs == 0) {
                     fprintf(stderr, "Invalid command. See HELP for usage\n");
                     break;
@@ -131,7 +127,7 @@ int process_file(thread_data* t_data) {
                     write_in_file(output, fd_out);
                     
 
-                    kvs_wait(delay); // Executa a espera sem acessar `output`.
+                    kvs_wait(delay); 
                 }
 
                 break;
@@ -185,7 +181,7 @@ int process_file(thread_data* t_data) {
 void* thread_process_file(void* arg) {
 
     thread_data* t = (thread_data*)arg;
-    printf("[Thread Start] Thread ID: %d  File: %s\n",t->thread_id, t->file);
+    
     process_file(t);
 
     return NULL;
@@ -197,7 +193,7 @@ int readFiles(char* path) {
     thread_data* threads_data[maxThreads];
     pthread_t threads[maxThreads];
 
-    printf("MAXTHREADS %d\n", maxThreads);
+    
 
     for (int i = 0; i < maxThreads; i++ ) {
 
@@ -222,13 +218,13 @@ int readFiles(char* path) {
     while ((file = readdir(dir)) != NULL) {
         
         if (is_job_file(file->d_name)) {
-            printf("fileName: %s\n", file->d_name);
+            
             snprintf(aux_path, sizeof(aux_path), "%s/%s", path, file->d_name);
-            // printf("Aux_path: %s\n", aux_path);
-            //printf("threads created--> %d\n", threads_created);
+            
+            
             
             if (threads_created < maxThreads) {
-                printf("IFFF\n");
+                
                 strcpy(threads_data[threads_created]->file, aux_path);
                 if (pthread_create(&threads[threads_created], NULL, thread_process_file, threads_data[threads_created]) != 0) {
                     perror("Failed to create thread\n");
@@ -237,15 +233,13 @@ int readFiles(char* path) {
                 threads_created++;
                 
             } else {
-                printf("ELSEE\n");
-                printf("waiting for available thread...\n");
                 while(i < maxThreads) {
                     if (!threads_data[i]->active) {
-                        printf("Threads Data--> Active: %d // i: %d\n",threads_data[i]->active, i);
+                        
                         strcpy(threads_data[i]->file, aux_path);
                         threads_data[i]->active = 1;
 
-                        printf("[Thread Reutilized] Thread ID: %d  File: %s\n",threads_data[i]->thread_id, threads_data[i]->file);
+                        
                         process_file(threads_data[i]);
                         break;
                     }
@@ -265,7 +259,7 @@ int readFiles(char* path) {
         pthread_join(threads[j], NULL);
         free(threads_data[j]);
     }
-    closedir(dir);  // Fecha o diretório após a leitura
+    closedir(dir);  
     return 0;
 }
 

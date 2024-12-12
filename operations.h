@@ -40,12 +40,19 @@ void kvs_show(char output[MAX_WRITE_SIZE]);
 /// @return 0 if the backup was successful, 1 otherwise.
 int kvs_backup(const char* backup_file_path, int backupCounter, int maxBackups);
 
-/// Waits for the last backup to be called.
-void kvs_wait_backup();
-
 /// Waits for a given amount of time.
 /// @param delay_us Delay in milliseconds.
 void kvs_wait(unsigned int delay_ms);
+
+int is_job_file(const char *filename);
+
+char *modify_file_path(const char *file_path, const char *old_ext, const char *new_ext);
+
+char *remove_extension(const char *file_path, const char *ext);
+
+char *add_extension(const char *file_path, const char *ext);
+
+int write_in_file(char output[MAX_WRITE_SIZE], int fd);
 
 
 #endif  // KVS_OPERATIONS_H
