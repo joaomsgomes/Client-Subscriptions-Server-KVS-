@@ -14,6 +14,7 @@
 #include "parser.h"
 #include "operations.h"
 
+// Struct for thread data
 int threads_created = 0;
 
 typedef struct {
@@ -28,8 +29,11 @@ typedef struct {
 int maxBackups = 0;
 int maxThreads = 0;
 
+// Function to process commands on a file
 int process_file(thread_data* t_data) {
 
+
+    // Open commands file and create output file
     int fd = open(t_data->file,O_RDONLY); 
     
 

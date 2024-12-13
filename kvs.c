@@ -19,6 +19,7 @@ int hash(const char *key) {
     return -1; 
 }
 
+// Added a read-write lock for each keynode on the hashTable
 struct HashTable* create_hash_table() {
     HashTable *ht = malloc(sizeof(HashTable));
     if (!ht) return NULL;
@@ -31,6 +32,7 @@ struct HashTable* create_hash_table() {
     return ht;
 }
 
+// Read-write Locks and Unlocks added to critical zones
 int write_pair(HashTable *ht, const char *key, const char *value) {
     int index = hash(key);
     pthread_rwlock_wrlock(&ht->locks[index]); 

@@ -21,7 +21,6 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
 }
 
 int is_job_file(const char *filename) {
-    
     const char *ext = strrchr(filename, '.');
     
     
